@@ -1059,8 +1059,6 @@ clean:
 .PHONY: clobber
 clobber: clean
 
-<<<<<<< HEAD
-=======
 # Clears out only target files
 .PHONY: deviceclean
 deviceclean:
@@ -1076,9 +1074,9 @@ dirty:
 	@echo -e ${CL_GRN}"build.prop and zip files erased"${CL_RST}
 
 # The Mia Special, cleans it just how Safvan and Chinmay like it ;)
-.PHONY: mia
-mia:  dirty installclean
-	@echo -e ${CL_GRN}"Clean and dirty, just how Safvan and Chinmay like it."${CL_RST}
+.PHONY: peter
+peter:  dirty installclean
+	@echo -e ${CL_GRN}"Clean and dirty, just how we like it."${CL_RST}
 
 # Testing flags an unnecessary amount of times? You must be Joe!
 .PHONY: joe
@@ -1086,8 +1084,6 @@ joe:    clean
 	@echo -e ${CL_GRN}"Cleaned, ready to test flags."${CL_RST}
 	@make bacon
 
-
->>>>>>> 2abac33... Add a option to disable debugging [1/2]
 # The rules for dataclean and installclean are defined in cleanbuild.mk.
 
 #xxx scrape this from ALL_MODULE_NAME_TAGS
