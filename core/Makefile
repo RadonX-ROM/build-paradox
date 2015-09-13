@@ -1000,8 +1000,8 @@ INTERNAL_SYSTEMIMAGE_FILES := $(filter $(TARGET_OUT)/%, \
     $(RECOVERY_PATCH_INSTALL))
 
 systemimage-squisher: $(INTERNAL_SYSTEMIMAGE_FILES)
-	@echo -e "Optimizing PNGs to Shrink ROM Size!"
-	$(hide) APKCERTS=$(APKCERTS_FILE) ./vendor/liquid/tools/squisher
+	@echo -e "Optimzing PNG Image files!"
+	$(hide) APKCERTS=$(APKCERTS_FILE) ./vendor/rnx/tools/squisher
 
 .PHONY: systemimage-squisher
 
