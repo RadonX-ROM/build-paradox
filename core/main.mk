@@ -316,17 +316,24 @@ user_variant := $(filter user userdebug,$(TARGET_BUILD_VARIANT))
 enable_target_debugging := true
 tags_to_install :=
 ifneq (,$(user_variant))
+
   # Target is secure in user builds.
-  ADDITIONAL_DEFAULT_PROPERTIES += ro.secure=1
+  ADDITIONAL_DEFAULT_PROPERTIES += ro.secure=0
+  ifneq ($(strip $(FORCE_DISABLE_DEBUGGING)),true)
+    ifeq ($(user_variant),userdebug)
 
-  ifeq ($(user_variant),userdebug)
-    # Pick up some extra useful tools
-    tags_to_install += debug
+      # Pick up some extra useful tools
+      tags_to_install += debug
 
-    # Enable Dalvik lock contention logging for userdebug builds.
-    ADDITIONAL_BUILD_PROPERTIES += dalvik.vm.lockprof.threshold=500
+      # Enable Dalvik lock contention logging for userdebug builds.
+      ADDITIONAL_BUILD_PROPERTIES += dalvik.vm.lockprof.threshold=500
+    else
+      # Disable debugging in plain user builds.
+      enable_target_debugging :=
+    endif
   else
-    # Disable debugging in plain user builds.
+
+    # Force debugging off.
     enable_target_debugging :=
   endif
 
@@ -1036,7 +1043,7 @@ $(foreach module,$(sample_MODULES),$(eval $(call \
 sample_ADDITIONAL_INSTALLED := \
         $(filter-out $(modules_to_install) $(modules_to_check) $(ALL_PREBUILT),$(sample_MODULES))
 samplecode: $(sample_APKS_COLLECTION)
-	@echo "Collect sample code apks: $^"
+	@echo -e ${CL_GRN}"Collect sample code apks:"${CL_RST}" $^"
 	# remove apks that are not intended to be installed.
 	rm -f $(sample_ADDITIONAL_INSTALLED)
 endif  # samplecode in $(MAKECMDGOALS)
@@ -1047,17 +1054,42 @@ findbugs: $(INTERNAL_FINDBUGS_HTML_TARGET) $(INTERNAL_FINDBUGS_XML_TARGET)
 .PHONY: clean
 clean:
 	@rm -rf $(OUT_DIR)/*
-	@echo "Entire build directory removed."
+	@echo -e ${CL_GRN}"Entire build directory removed."${CL_RST}
 
 .PHONY: clobber
 clobber: clean
+
+# Clears out only target files
+.PHONY: deviceclean
+deviceclean:
+	@rm -rf $(OUT_DIR)/target/product/$(TARGET_DEVICE)
+	@echo -e ${CL_GRN}"$(TARGET_DEVICE) files removed successfully"${CL_RST}
+
+# Clears out zip and build.prop
+.PHONY: dirty
+dirty:
+	@rm -rf $(OUT_DIR)/target/product/*/system/build.prop
+	@rm -rf $(OUT_DIR)/target/product/*/*.zip
+	@rm -rf $(OUT_DIR)/target/product/*/*.md5sum
+	@echo -e ${CL_GRN}"build.prop and zip files erased"${CL_RST}
+
+# The Mia Special, cleans it just how Safvan and Chinmay like it ;)
+.PHONY: peter
+peter:  dirty installclean
+	@echo -e ${CL_GRN}"Clean and dirty, just how we like it."${CL_RST}
+
+# Testing flags an unnecessary amount of times? You must be Joe!
+.PHONY: joe
+joe:    clean
+	@echo -e ${CL_GRN}"Cleaned, ready to test flags."${CL_RST}
+	@make bacon
 
 # The rules for dataclean and installclean are defined in cleanbuild.mk.
 
 #xxx scrape this from ALL_MODULE_NAME_TAGS
 .PHONY: modules
 modules:
-	@echo "Available sub-modules:"
+	@echo -e ${CL_GRN}"Available sub-modules:"${CL_RST}
 	@echo "$(call module-names-for-tag-list,$(ALL_MODULE_TAGS))" | \
 	      tr -s ' ' '\n' | sort -u | $(COLUMN)
 

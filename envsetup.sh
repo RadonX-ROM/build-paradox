@@ -120,9 +120,13 @@ function setpaths()
     gccprebuiltdir=$(get_abs_build_var ANDROID_GCC_PREBUILTS)
 
     # defined in core/config.mk
-    targetgccversion=$(get_build_var TARGET_GCC_VERSION)
+    targetandgccversion=$(get_build_var TARGET_AND_GCC_VERSION)
     targetgccversion2=$(get_build_var 2ND_TARGET_GCC_VERSION)
-    export TARGET_GCC_VERSION=$targetgccversion
+    export TARGET_AND_GCC_VERSION=$targetandgccversion
+
+    # defined in core/config.mk
+    targetkernelgccversion=$(get_build_var TARGET_KERNEL_GCC_VERSION)
+    export TARGET_KERNEL_GCC_VERSION=$targetkernelgccversion
 
     # The gcc toolchain does not exists for windows/cygwin. In this case, do not reference it.
     export ANDROID_TOOLCHAIN=
@@ -133,9 +137,9 @@ function setpaths()
             ;;
         x86_64) toolchaindir=x86/x86_64-linux-android-$targetgccversion/bin
             ;;
-        arm) toolchaindir=arm/arm-linux-androideabi-$targetgccversion/bin
+        arm) toolchaindir=arm/arm-linux-androideabi-$targetandgccversion/bin
             ;;
-        arm64) toolchaindir=aarch64/aarch64-linux-android-$targetgccversion/bin;
+        arm64) toolchaindir=aarch64/aarch64-linux-android-$targetandgccversion/bin;
                toolchaindir2=arm/arm-linux-androideabi-$targetgccversion2/bin
             ;;
         mips|mips64) toolchaindir=mips/mips64el-linux-android-$targetgccversion/bin
@@ -157,10 +161,18 @@ function setpaths()
     case $ARCH in
         arm)
             # Legacy toolchain configuration used for ARM kernel compilation
-            toolchaindir=arm/arm-eabi-$targetgccversion/bin
+            toolchaindir=arm/arm-eabi-$targetkernelgccversion/bin
             if [ -d "$gccprebuiltdir/$toolchaindir" ]; then
                  export ARM_EABI_TOOLCHAIN="$gccprebuiltdir/$toolchaindir"
-                 ANDROID_KERNEL_TOOLCHAIN_PATH="$ARM_EABI_TOOLCHAIN":
+                 export ANDROID_KERNEL_TOOLCHAIN_PATH="$ARM_EABI_TOOLCHAIN":
+            fi
+            ;;
+        arm64)
+            # Legacy toolchain configuration used for ARM64 kernel compilation
+            toolchaindir=aarch64/aarch64-$targetkernelgccversion/bin
+            if [ -d "$gccprebuiltdir/$toolchaindir" ]; then
+                 export AARCH64_TOOLCHAIN="$gccprebuiltdir/$toolchaindir"
+                 export ANDROID_KERNEL_TOOLCHAIN_PATH="$AARCH64_TOOLCHAIN":
             fi
             ;;
         *)
@@ -451,14 +463,6 @@ function add_lunch_combo()
     LUNCH_MENU_CHOICES=(${LUNCH_MENU_CHOICES[@]} $new_combo)
 }
 
-# add the default one here
-add_lunch_combo aosp_arm-eng
-add_lunch_combo aosp_arm64-eng
-add_lunch_combo aosp_mips-eng
-add_lunch_combo aosp_mips64-eng
-add_lunch_combo aosp_x86-eng
-add_lunch_combo aosp_x86_64-eng
-
 function print_lunch_menu()
 {
     local uname=$(uname)
@@ -614,6 +618,111 @@ function tapas()
 
     set_stuff_for_environment
     printconfig
+}
+
+# Credit for color strip sed: http://goo.gl/BoIcm
+function mmmp()
+{
+    if [[ $# < 1 || $1 == "--help" || $1 == "-h" ]]; then
+        echo "mmmp [make arguments] <path-to-project>"
+        return 1
+    fi
+
+    # Get product name from cm_<product>
+    PRODUCT=`echo $TARGET_PRODUCT | tr "_" "\n" | tail -n 1`
+
+    adb start-server # Prevent unexpected starting server message from adb get-state in the next line
+    if [ $(adb get-state) != device -a $(adb shell busybox test -e /sbin/recovery 2> /dev/null; echo $?) != 0 ] ; then
+        echo "No device is online. Waiting for one..."
+        echo "Please connect USB and/or enable USB debugging"
+        until [ $(adb get-state) = device -o $(adb shell busybox test -e /sbin/recovery 2> /dev/null; echo $?) = 0 ];do
+            sleep 1
+        done
+        echo "Device Found.."
+    fi
+
+    adb root &> /dev/null
+    sleep 0.3
+    adb wait-for-device &> /dev/null
+    sleep 0.3
+    adb remount &> /dev/null
+
+    mmm $* | tee .log
+
+    # Install: <file>
+    LOC=$(cat .log | sed -r 's/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g' | grep 'Install' | cut -d ':' -f 2)
+
+    # Copy: <file>
+    LOC=$LOC $(cat .log | sed -r 's/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g' | grep 'Copy' | cut -d ':' -f 2)
+
+    for FILE in $LOC; do
+        # Get target file name (i.e. system/bin/adb)
+        TARGET=$(echo $FILE | sed "s/\/$PRODUCT\//\n/" | tail -n 1)
+
+        # Don't send files that are not in /system.
+        if ! echo $TARGET | egrep '^system\/' > /dev/null ; then
+            continue
+        else
+            echo "Pushing: $TARGET"
+            adb push $FILE $TARGET
+        fi
+    done
+    rm -f .log
+    return 0
+}
+
+alias mmp='mmmp .'
+
+function eat()
+{
+    if [ "$OUT" ] ; then
+        MODVERSION=`sed -n -e'/ro\.slim\.version/s/.*=//p' $OUT/system/build.prop`
+        ZIPFILE=slim-$MODVERSION.zip
+        ZIPPATH=$OUT/$ZIPFILE
+        if [ ! -f $ZIPPATH ] ; then
+            echo "Nothing to eat"
+            return 1
+        fi
+        adb start-server # Prevent unexpected starting server message from adb get-state in the next line
+        if [ $(adb get-state) != device -a $(adb shell busybox test -e /sbin/recovery 2> /dev/null; echo $?) != 0 ] ; then
+            echo "No device is online. Waiting for one..."
+            echo "Please connect USB and/or enable USB debugging"
+            until [ $(adb get-state) = device -o $(adb shell busybox test -e /sbin/recovery 2> /dev/null; echo $?) = 0 ];do
+                sleep 1
+            done
+            echo "Device Found.."
+        fi
+        # if adbd isn't root we can't write to /cache/recovery/
+        adb root
+        sleep 1
+        adb wait-for-device
+        SZ=`stat -c %s $ZIPPATH`
+        CACHESIZE=`adb shell busybox df -PB1 /cache | grep /cache | tr -s ' ' | cut -d ' ' -f 4`
+        if [ $CACHESIZE -gt $SZ ];
+        then
+            PUSHDIR=/cache/
+            DIR=cache
+        else
+            PUSHDIR=/storage/sdcard0/
+             # Optional path for sdcard0 in recovery
+             [ -z "$1" ] && DIR=sdcard/0 || DIR=$1
+        fi
+        echo "Pushing $ZIPFILE to $PUSHDIR"
+        if adb push $ZIPPATH $PUSHDIR ; then
+            cat << EOF > /tmp/command
+--update_package=/$DIR/$ZIPFILE
+EOF
+            if adb push /tmp/command /cache/recovery/ ; then
+                echo "Rebooting into recovery for installation"
+                adb reboot recovery
+            fi
+            rm /tmp/command
+        fi
+    else
+        echo "Nothing to eat"
+        return 1
+    fi
+    return $?
 }
 
 function gettop
