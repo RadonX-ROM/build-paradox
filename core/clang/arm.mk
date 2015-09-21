@@ -23,12 +23,12 @@ CLANG_CONFIG_arm_UNKNOWN_CFLAGS := \
   -fno-strict-volatile-bitfields \
   -fno-align-jumps \
   -Wa,--noexecstack \
-  -mfpu=neon-vfpv4
+  -mfpu=neon-vfpv4 \
+  -finline-functions
 
 define subst-clang-incompatible-arm-flags
   $(subst -march=armv5te,-march=armv5t,\
   $(subst -march=armv5e,-march=armv5,\
   $(subst -mcpu=cortex-a15,-march=armv7-a,\
-  $(subst -finline-functions,-fkeep-inline-functions,\
-  $(1)))))
+  $(1))))
 endef
